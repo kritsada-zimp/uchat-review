@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UChat ID Linking — QR Bridge Flow Presentation</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+    color: #e7ebf3;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Sukhumvit Set', 'Noto Sans Thai', system-ui, sans-serif;
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  header {
+    padding: 16px 32px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+  }
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #e7ebf3;
+  }
+  header h1 .accent { color: #6dd5ed; }
+  .step-indicator {
+    font-size: 14px;
+    color: #8b94a7;
+    font-variant-numeric: tabular-nums;
+  }
+  .step-indicator b { color: #6dd5ed; font-weight: 600; }
+
+  /* Main area */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    overflow: hidden;
+  }
+
+  /* Stage */
+  .stage {
+    position: relative;
+    padding: 24px 32px;
+    overflow: hidden;
+  }
+  .lanes {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    height: 100%;
+    position: relative;
+  }
+  .lane {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+  .actor {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 14px 16px;
+    width: 100%;
+    text-align: center;
+    transition: all 0.4s cubic-bezier(0.4,0,0.2,1);
+    position: relative;
+    z-index: 2;
+  }
+  .actor.active {
+    background: rgba(109,213,237,0.15);
+    border-color: #6dd5ed;
+    box-shadow: 0 0 24px rgba(109,213,237,0.4);
+    transform: translateY(-2px);
+  }
+  .actor-icon {
+    font-size: 32px;
+    margin-bottom: 6px;
+    display: block;
+  }
+  .actor-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e7ebf3;
+  }
+  .actor-sub {
+    font-size: 11px;
+    color: #8b94a7;
+    margin-top: 2px;
+  }
+
+  /* Lane timeline (the vertical lifeline) */
+  .lifeline {
+    position: absolute;
+    top: 80px;
+    bottom: 110px;
+    left: 50%;
+    width: 2px;
+    background: rgba(255,255,255,0.08);
+    transform: translateX(-1px);
+  }
+
+  /* DB box per lane */
+  .db-state {
+    margin-top: auto;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 10px 12px;
+    width: 100%;
+    font-size: 11px;
+    font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+    min-height: 90px;
+    transition: all 0.3s;
+  }
+  .db-state.pulse {
+    border-color: #6dd5ed;
+    box-shadow: 0 0 16px rgba(109,213,237,0.4);
+    background: rgba(109,213,237,0.08);
+  }
+  .db-state .db-title {
+    color: #6dd5ed;
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .db-state .db-content {
+    color: #b8c0d2;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .db-state .db-empty {
+    color: #4a5168;
+    font-style: italic;
+  }
+
+  /* Arrows / messages */
+  .messages {
+    position: absolute;
+    top: 80px;
+    left: 32px;
+    right: 32px;
+    bottom: 110px;
+    pointer-events: none;
+  }
+  .msg {
+    position: absolute;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.5s, transform 0.5s;
+  }
+  .msg.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .msg-arrow {
+    height: 2px;
+    background: linear-gradient(90deg, #6dd5ed 0%, #2193b0 100%);
+    position: relative;
+    border-radius: 2px;
+    box-shadow: 0 0 12px rgba(109,213,237,0.6);
+  }
+  .msg-arrow.reverse {
+    background: linear-gradient(90deg, #2193b0 0%, #6dd5ed 100%);
+  }
+  .msg-arrow::after {
+    content: '';
+    position: absolute;
+    right: -6px;
+    top: -5px;
+    width: 0;
+    height: 0;
+    border-left: 12px solid #6dd5ed;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+  }
+  .msg-arrow.reverse::after {
+    left: -6px;
+    right: auto;
+    border-left: none;
+    border-right: 12px solid #6dd5ed;
+  }
+  .msg-label {
+    position: absolute;
+    top: -32px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(20,26,48,0.95);
+    border: 1px solid #6dd5ed;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+    color: #e7ebf3;
+    white-space: nowrap;
+    backdrop-filter: blur(8px);
+  }
+  .msg.event .msg-arrow {
+    background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
+    box-shadow: 0 0 12px rgba(245,87,108,0.5);
+  }
+  .msg.event .msg-arrow::after {
+    border-left-color: #f5576c;
+  }
+  .msg.event .msg-label {
+    border-color: #f5576c;
+  }
+
+  /* Polling indicator */
+  .polling-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 48px;
+    opacity: 0;
+    transition: opacity 0.4s;
+    pointer-events: none;
+  }
+  .polling-indicator.show {
+    opacity: 1;
+    animation: spin 2s linear infinite;
+  }
+  @keyframes spin {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+  }
+
+  /* Footer */
+  footer {
+    padding: 20px 32px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    background: rgba(0,0,0,0.2);
+  }
+  .step-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: #6dd5ed;
+    margin-bottom: 6px;
+  }
+  .step-desc {
+    font-size: 14px;
+    color: #b8c0d2;
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+  .controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .btn {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #e7ebf3;
+    padding: 8px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .btn:hover:not(:disabled) {
+    background: rgba(109,213,237,0.15);
+    border-color: #6dd5ed;
+  }
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .btn.primary {
+    background: linear-gradient(90deg, #2193b0 0%, #6dd5ed 100%);
+    border-color: transparent;
+    color: #0a0e27;
+    font-weight: 600;
+  }
+  .btn.primary:hover:not(:disabled) {
+    box-shadow: 0 0 16px rgba(109,213,237,0.5);
+  }
+  .progress {
+    flex: 1;
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 0 12px;
+  }
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #2193b0 0%, #6dd5ed 100%);
+    transition: width 0.4s;
+    width: 0%;
+  }
+  .phase-label {
+    font-size: 11px;
+    color: #6dd5ed;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    font-weight: 700;
+  }
+
+  /* Tag / status pill */
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .pill.s2s { background: #f5576c; color: white; }
+  .pill.bearer { background: #6dd5ed; color: #0a0e27; }
+  .pill.webhook { background: #f093fb; color: #0a0e27; }
+
+  /* Auto-play toggle */
+  .auto-toggle {
+    font-size: 12px;
+    color: #8b94a7;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .auto-toggle input { cursor: pointer; }
+
+  /* Final state badge */
+  .badge-success {
+    display: inline-block;
+    background: linear-gradient(90deg, #43e97b 0%, #38f9d7 100%);
+    color: #0a0e27;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: 8px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="accent">UChat ID Linking</span> — QR Bridge Flow <span style="color:#8b94a7;font-weight:400;font-size:13px;">UCHATOA-3251</span></h1>
+  <div class="step-indicator">Step <b id="step-num">0</b> / <span id="step-total">0</span></div>
+</header>
+
+<main>
+  <div class="stage">
+    <div class="lanes">
+      <div class="lane" data-actor="user">
+        <div class="actor" id="actor-user">
+          <span class="actor-icon">👤</span>
+          <div class="actor-name">User</div>
+          <div class="actor-sub">BusinessA / AccountA</div>
+        </div>
+        <div class="lifeline"></div>
+        <div class="db-state" id="db-user">
+          <div class="db-title">Context</div>
+          <div class="db-content db-empty">—</div>
+        </div>
+      </div>
+
+      <div class="lane" data-actor="oaweb">
+        <div class="actor" id="actor-oaweb">
+          <span class="actor-icon">💻</span>
+          <div class="actor-name">OA-web</div>
+          <div class="actor-sub">React + TanStack Query</div>
+        </div>
+        <div class="lifeline"></div>
+        <div class="db-state" id="db-oaweb">
+          <div class="db-title">FE State</div>
+          <div class="db-content db-empty">—</div>
+        </div>
+      </div>
+
+      <div class="lane" data-actor="oabe">
+        <div class="actor" id="actor-oabe">
+          <span class="actor-icon">⚙️</span>
+          <div class="actor-name">OA-backend</div>
+          <div class="actor-sub">Node + Drizzle + Postgres</div>
+        </div>
+        <div class="lifeline"></div>
+        <div class="db-state" id="db-postgres">
+          <div class="db-title">Postgres · OALinkSession</div>
+          <div class="db-content db-empty">empty</div>
+        </div>
+      </div>
+
+      <div class="lane" data-actor="core">
+        <div class="actor" id="actor-core">
+          <span class="actor-icon">🔷</span>
+          <div class="actor-name">Core (uchat-api)</div>
+          <div class="actor-sub">Moleculer + Mongo + Redis</div>
+        </div>
+        <div class="lifeline"></div>
+        <div class="db-state" id="db-core">
+          <div class="db-title">Redis · oaLink:token</div>
+          <div class="db-content db-empty">empty</div>
+        </div>
+      </div>
+
+      <div class="lane" data-actor="flutter">
+        <div class="actor" id="actor-flutter">
+          <span class="actor-icon">📱</span>
+          <div class="actor-name">Flutter</div>
+          <div class="actor-sub">Messenger app</div>
+        </div>
+        <div class="lifeline"></div>
+        <div class="db-state" id="db-flutter">
+          <div class="db-title">App State</div>
+          <div class="db-content db-empty">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="messages" id="messages"></div>
+    <div class="polling-indicator" id="polling-indicator">🔄</div>
+  </div>
+
+  <footer>
+    <div class="phase-label" id="phase-label">Phase</div>
+    <div class="step-title" id="step-title">Title</div>
+    <div class="step-desc" id="step-desc">Description</div>
+    <div class="controls">
+      <button class="btn" id="btn-restart">⏮ Restart</button>
+      <button class="btn" id="btn-prev">◀ Back</button>
+      <button class="btn primary" id="btn-next">Next ▶</button>
+      <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+      <label class="auto-toggle"><input type="checkbox" id="auto-toggle" /> Auto-play (3s)</label>
+    </div>
+  </footer>
+</main>
+
+<script>
+// Actor lane index for positioning messages
+const ACTOR_IDX = { user: 0, oaweb: 1, oabe: 2, core: 3, flutter: 4 };
+const LANE_WIDTH_FRAC = 1/5;
+
+const STEPS = [
+  {
+    phase: 'Phase 0',
+    title: 'Initial state',
+    desc: 'BusinessA login เข้า OA-web อยู่ที่หน้า Account Setting — ฟิลด์ UChat ID ยังว่าง AccountA login Messenger app บนมือถือ พร้อม scan QR ทุก backend store ว่าง',
+    actors: ['user', 'oaweb', 'flutter'],
+    state: {
+      user: 'BusinessA: ไม่มี link\nAccountA: ไม่มี link',
+      oaweb: 'หน้า Account Setting\nuchat_user_id: null'
+    }
+  },
+  {
+    phase: 'Phase 1 — Generate QR',
+    title: 'User กดปุ่ม link icon',
+    desc: 'BusinessA tap ปุ่ม link icon ข้างฟิลด์ UChat ID OA-web ยิง POST /v1/oa-link/generate ด้วย Bearer ของ OA user',
+    actors: ['user', 'oaweb'],
+    msg: { from: 'user', to: 'oaweb', label: 'tap link icon' },
+    state: { user: 'BusinessA: ไม่มี link\nAccountA: ไม่มี link', oaweb: 'mutate: useOALinkGenerate()' }
+  },
+  {
+    phase: 'Phase 1 — Generate QR',
+    title: 'OA-web → OA-backend',
+    desc: 'OA-web ยิง mutation request ไป OA-backend OA-backend ตรวจ UserModel.uchat_user_id == null ก่อน generate token',
+    actors: ['oaweb', 'oabe'],
+    msg: { from: 'oaweb', to: 'oabe', label: 'POST /v1/oa-link/generate' },
+    state: { oabe: 'guard: uchat_user_id == null ✓\ngenerate token (32B hex)' }
+  },
+  {
+    phase: 'Phase 1 — Generate QR',
+    title: 'OA-backend → Core (S2S)',
+    desc: 'OA-backend เรียก Core ผ่าน S2S (X-Auth-Key + X-Idempotency-Key) เพื่อ pre-register token + business account snapshot ใน Redis ของ Core',
+    actors: ['oabe', 'core'],
+    msg: { from: 'oabe', to: 'core', label: 'POST /v3/oa-link/register-token', type: 's2s' },
+    state: { oabe: 'token: abc123…\nรอ Core register' }
+  },
+  {
+    phase: 'Phase 1 — Generate QR',
+    title: 'Core เขียน Redis',
+    desc: 'Core SET NX key account.oaLink:token|abc123… พร้อม snapshot ของ business account TTL 600 วินาที (10 นาที)',
+    actors: ['core'],
+    pulse: 'db-core',
+    state: { core: 'account.oaLink:token|abc123…\nstatus: pending\nbusinessAccount: {\n  id, email, displayName\n}\nTTL: 600s' }
+  },
+  {
+    phase: 'Phase 1 — Generate QR',
+    title: 'Core → OA-backend (201)',
+    desc: 'Core ตอบ 201 { registered: true, expiresAt } กลับให้ OA-backend OA-backend insert row OALinkSession ใน Postgres status=pending',
+    actors: ['core', 'oabe'],
+    msg: { from: 'core', to: 'oabe', label: '201 { registered, expiresAt }', reverse: true },
+    pulse: 'db-postgres',
+    state: {
+      core: 'account.oaLink:token|abc123…\nstatus: pending\nTTL: 600s',
+      postgres: 'oa_link_session\ntoken: abc123…\nbusiness_account_id: B-1\nstatus: pending\nexpires_at: +10min'
+    }
+  },
+  {
+    phase: 'Phase 1 — Generate QR',
+    title: 'OA-backend → OA-web → QR render',
+    desc: 'OA-backend ตอบ { token, expiresAt } ให้ OA-web OA-web render QR code ที่มี value = https://uchat.social/oa-link?token=abc123…',
+    actors: ['oabe', 'oaweb'],
+    msg: { from: 'oabe', to: 'oaweb', label: '200 { token, expiresAt }', reverse: true },
+    state: { oaweb: 'QR rendered ✓\nstart polling…' }
+  },
+  {
+    phase: 'Phase 2 — Polling',
+    title: 'OA-web poll status ทุก 1 วินาที',
+    desc: 'OA-web ใช้ TanStack Query refetchInterval: 1000ms เรียก POST /v1/oa-link/status จนกว่า status จะไม่ใช่ pending ตอนนี้ยังได้ pending กลับมาเพราะยังไม่มีใคร scan',
+    actors: ['oaweb', 'oabe'],
+    msg: { from: 'oaweb', to: 'oabe', label: 'POST /v1/oa-link/status' },
+    showPolling: true,
+    state: { oaweb: 'polling…\nstatus: pending' }
+  },
+  {
+    phase: 'Phase 3 — Scan + Inspect',
+    title: 'User scan QR ด้วย Messenger',
+    desc: 'AccountA เปิด Messenger app → scan QR ผ่าน mobile_scanner Universal link https://uchat.social/oa-link?token=… จะเปิด app ผ่าน app_links → deep_link_handler.dart parse path /oa-link',
+    actors: ['user', 'flutter'],
+    msg: { from: 'user', to: 'flutter', label: 'scan QR (universal link)' },
+    state: { flutter: 'deep link parsed\ntoken: abc123…\nnav OALinkConfirmScreen' }
+  },
+  {
+    phase: 'Phase 3 — Scan + Inspect',
+    title: 'Flutter → Core /inspect',
+    desc: 'Flutter ยิง POST /v3/oa-link/inspect ด้วย Bearer JWT ของ UChat user (AccountA) Core ตรวจ Redis token + เช็คว่า AccountA ยัง link อะไรไม่ได้',
+    actors: ['flutter', 'core'],
+    msg: { from: 'flutter', to: 'core', label: 'POST /v3/oa-link/inspect', type: 'bearer' },
+    state: { core: 'lookup Redis ✓\ncheck Account.linkAccounts.officialAccount ✓ ว่าง' }
+  },
+  {
+    phase: 'Phase 3 — Scan + Inspect',
+    title: 'Core → Flutter (linkable)',
+    desc: 'Core ตอบ { status: "linkable", businessAccount: { id, email, displayName } } Flutter เปิด CupertinoModalBottomSheet โชว์ prompt "Allow to link with Business Account?" พร้อมข้อมูล business',
+    actors: ['core', 'flutter'],
+    msg: { from: 'core', to: 'flutter', label: '{ status: "linkable", businessAccount }', reverse: true },
+    state: { flutter: 'bottom sheet เปิด\n"Allow to link with\nBusinessA?"' }
+  },
+  {
+    phase: 'Phase 4 — Confirm',
+    title: 'User กด Allow',
+    desc: 'AccountA tap ปุ่ม Allow ใน bottom sheet Flutter ยิง POST /v3/oa-link/confirm พร้อม decision: "allow"',
+    actors: ['user', 'flutter'],
+    msg: { from: 'user', to: 'flutter', label: 'tap Allow' },
+    state: { flutter: 'confirming…\nloading overlay' }
+  },
+  {
+    phase: 'Phase 4 — Confirm',
+    title: 'Flutter → Core /confirm',
+    desc: 'Flutter เรียก confirm endpoint Core ทำ atomic operation: Redis WATCH/MULTI ป้องกัน race + เขียน link record ลง Mongo (Account.linkAccounts.officialAccount)',
+    actors: ['flutter', 'core'],
+    msg: { from: 'flutter', to: 'core', label: 'POST /v3/oa-link/confirm allow', type: 'bearer' },
+    pulse: 'db-core',
+    state: { core: 'WATCH + MULTI ✓\nWRITE Mongo:\nlinkAccounts.officialAccount\n= { businessAccountId,\n    linkedAt }' }
+  },
+  {
+    phase: 'Phase 4 — Confirm',
+    title: 'Core → OA-backend (webhook)',
+    desc: 'Core ยิง webhook officialAccount.userLinked ไป OA-backend ผ่าน webhook channel เดิม OA-backend handler ทำ DB transaction: UPDATE OALinkSession + UserModel.uchat_user_id',
+    actors: ['core', 'oabe'],
+    msg: { from: 'core', to: 'oabe', label: 'webhook userLinked', type: 'webhook' },
+    pulse: 'db-postgres',
+    state: {
+      postgres: 'OALinkSession\nstatus: linked ✓\nuchat_user_id: A-1\nuchat_username: accA\n\nUserModel\nuchat_user_id: A-1 ✓'
+    }
+  },
+  {
+    phase: 'Phase 4 — Confirm',
+    title: 'Core → Flutter (linked)',
+    desc: 'Core ลบ Redis token แล้วตอบ { status: "linked", uchatId: "accA" } ให้ Flutter Flutter โชว์ toast "เชื่อมโยงสำเร็จ" แล้วปิด bottom sheet',
+    actors: ['core', 'flutter'],
+    msg: { from: 'core', to: 'flutter', label: '{ status: "linked", uchatId }', reverse: true },
+    state: { core: 'Redis: DEL key ✓\n(TTL backup)', flutter: 'toast: เชื่อมโยงสำเร็จ\nclose modal' }
+  },
+  {
+    phase: 'Phase 5 — Success display',
+    title: 'OA-web polling เห็น linked',
+    desc: 'รอบถัดไปของ polling OA-web เรียก /status อีกครั้ง — OA-backend ตอบ { status: "linked", uchatId: "accA" } OA-web เด้งไปหน้า /user/setting/linked-successfully',
+    actors: ['oaweb', 'oabe'],
+    msg: { from: 'oaweb', to: 'oabe', label: 'POST /v1/oa-link/status' },
+    state: { oaweb: 'polling → linked ✓\nnav /linked-successfully?uchatId=accA' }
+  },
+  {
+    phase: 'Phase 5 — Success display',
+    title: 'User กด "Back to OA"',
+    desc: 'หน้า "Linked successfully" แสดง checkmark + UChat ID = accA User กด "Back to OA" → OA-web invalidate user query → refetch → field UChat ID โชว์ accA + ปุ่ม Copy enable',
+    actors: ['user', 'oaweb'],
+    msg: { from: 'user', to: 'oaweb', label: 'tap "Back to OA"' },
+    state: { oaweb: 'Account Setting\nUChat ID: accA ✓\n📋 Copy button' }
+  },
+  {
+    phase: 'Final state ✅',
+    title: 'Link complete — ทุก DB sync แล้ว',
+    desc: 'Mongo (Core) มี link record · Postgres (OA-backend) มี OALinkSession.status=linked + UserModel.uchat_user_id · Redis ของ Core ถูกล้างแล้ว · User เห็น UChat ID บน OA-web พร้อม Copy button · AccountA สามารถ login OA-web ได้ทั้งผ่าน Business email/password และ QR scan',
+    actors: ['user', 'oaweb', 'oabe', 'core', 'flutter'],
+    state: {
+      user: 'BusinessA ↔ AccountA\nlinked 1:1 ✓',
+      oaweb: 'UChat ID: accA\n+ Copy button',
+      postgres: 'OALinkSession: linked\nUserModel.uchat_user_id\n= A-1',
+      core: '(Redis cleared)\n\nMongo:\nAccount.linkAccounts\n.officialAccount\n= { businessAccountId,\n    linkedAt }',
+      flutter: 'flow complete\nready'
+    },
+    final: true
+  }
+];
+
+// Cumulative state — apply state changes incrementally
+const STATE_HISTORY = [];
+function computeCumulativeState(idx) {
+  const cum = { user: '', oaweb: '', postgres: '', core: '', flutter: '' };
+  for (let i = 0; i <= idx; i++) {
+    const s = STEPS[i].state || {};
+    Object.assign(cum, s);
+  }
+  return cum;
+}
+
+const $ = id => document.getElementById(id);
+const messagesEl = $('messages');
+const stageEl = document.querySelector('.stage');
+
+let currentStep = 0;
+let autoPlayTimer = null;
+
+function getLanePixelCenter(actor) {
+  const stageRect = stageEl.getBoundingClientRect();
+  const innerWidth = stageRect.width - 64; // padding 32 each side
+  const laneWidth = innerWidth / 5;
+  return 32 + laneWidth * (ACTOR_IDX[actor] + 0.5) - 32; // relative to messages container
+}
+
+function renderStep(i) {
+  const step = STEPS[i];
+  currentStep = i;
+  $('step-num').textContent = i + 1;
+  $('step-total').textContent = STEPS.length;
+  $('phase-label').textContent = step.phase;
+  $('step-title').innerHTML = step.title + (step.final ? '<span class="badge-success">SUCCESS</span>' : '');
+  $('step-desc').textContent = step.desc;
+  $('progress-bar').style.width = ((i+1)/STEPS.length * 100) + '%';
+
+  // Reset all actors
+  ['user','oaweb','oabe','core','flutter'].forEach(a => {
+    $('actor-' + a).classList.remove('active');
+  });
+  // Activate
+  (step.actors || []).forEach(a => $('actor-' + a).classList.add('active'));
+
+  // DB state — apply cumulatively
+  const cum = computeCumulativeState(i);
+  setDb('db-user', cum.user, 'Context');
+  setDb('db-oaweb', cum.oaweb, 'FE State');
+  setDb('db-postgres', cum.postgres, 'Postgres · OALinkSession');
+  setDb('db-core', cum.core, 'Redis · oaLink:token');
+  setDb('db-flutter', cum.flutter, 'App State');
+
+  // Pulse
+  document.querySelectorAll('.db-state').forEach(el => el.classList.remove('pulse'));
+  if (step.pulse) {
+    setTimeout(() => $(step.pulse).classList.add('pulse'), 100);
+    setTimeout(() => $(step.pulse).classList.remove('pulse'), 1800);
+  }
+
+  // Polling indicator
+  if (step.showPolling) {
+    $('polling-indicator').classList.add('show');
+    setTimeout(() => $('polling-indicator').classList.remove('show'), 2500);
+  }
+
+  // Message arrow
+  messagesEl.innerHTML = '';
+  if (step.msg) {
+    const fromIdx = ACTOR_IDX[step.msg.from];
+    const toIdx = ACTOR_IDX[step.msg.to];
+    const stageRect = stageEl.getBoundingClientRect();
+    const innerWidth = stageRect.width - 64;
+    const laneWidth = innerWidth / 5;
+    const fromX = laneWidth * (fromIdx + 0.5);
+    const toX = laneWidth * (toIdx + 0.5);
+    const left = Math.min(fromX, toX);
+    const width = Math.abs(toX - fromX);
+    const reverse = step.msg.reverse || toIdx < fromIdx;
+
+    const msgEl = document.createElement('div');
+    msgEl.className = 'msg' + (step.msg.type === 'webhook' ? ' event' : '');
+    msgEl.style.left = left + 'px';
+    msgEl.style.top = '60px';
+    msgEl.style.width = width + 'px';
+    msgEl.innerHTML = `
+      <div class="msg-arrow ${reverse ? 'reverse' : ''}"></div>
+      <div class="msg-label">${step.msg.label}${
+        step.msg.type === 's2s' ? '<span class="pill s2s">S2S</span>' :
+        step.msg.type === 'bearer' ? '<span class="pill bearer">Bearer</span>' :
+        step.msg.type === 'webhook' ? '<span class="pill webhook">webhook</span>' : ''
+      }</div>
+    `;
+    messagesEl.appendChild(msgEl);
+    setTimeout(() => msgEl.classList.add('show'), 60);
+  }
+
+  $('btn-prev').disabled = i === 0;
+  $('btn-next').disabled = i === STEPS.length - 1;
+}
+
+function setDb(id, content, title) {
+  const el = $(id);
+  if (!content) {
+    el.querySelector('.db-content').innerHTML = '<span class="db-empty">empty</span>';
+  } else {
+    el.querySelector('.db-content').textContent = content;
+    el.querySelector('.db-content').classList.remove('db-empty');
+  }
+}
+
+function next() { if (currentStep < STEPS.length - 1) renderStep(currentStep + 1); }
+function prev() { if (currentStep > 0) renderStep(currentStep - 1); }
+function restart() { renderStep(0); }
+
+$('btn-next').addEventListener('click', next);
+$('btn-prev').addEventListener('click', prev);
+$('btn-restart').addEventListener('click', restart);
+
+// Auto-play
+$('auto-toggle').addEventListener('change', e => {
+  if (e.target.checked) {
+    autoPlayTimer = setInterval(() => {
+      if (currentStep < STEPS.length - 1) next();
+      else { e.target.checked = false; clearInterval(autoPlayTimer); }
+    }, 3000);
+  } else {
+    clearInterval(autoPlayTimer);
+  }
+});
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
+  if (e.key === 'ArrowLeft') prev();
+  if (e.key === 'Home') restart();
+});
+
+// Re-render on resize (recalculate arrow positions)
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => renderStep(currentStep), 200);
+});
+
+// Initial render
+renderStep(0);
+</script>
+</body>
+</html>
