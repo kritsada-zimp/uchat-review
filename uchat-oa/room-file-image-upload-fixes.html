@@ -1,0 +1,1211 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room File — ทำไม upload รูปแขวน และ RAM ไม่คืน</title>
+<style>
+/* ─── tokens ────────────────────────────────────────────────────────────── */
+:root {
+  --bg: #f2f3f5;
+  --bg-raise: #ffffff;
+  --bg-sink: #e7e9ee;
+  --line: #d5d9e0;
+  --line-soft: #e4e7ec;
+  --fg: #1a1d23;
+  --fg-dim: #5f6874;
+  --fg-faint: #8b939f;
+  --signal: #00807c;
+  --signal-soft: rgba(0, 128, 124, .12);
+  --fault: #c62b41;
+  --fault-soft: rgba(198, 43, 65, .12);
+  --caution: #8f6209;
+  --caution-soft: rgba(143, 98, 9, .13);
+  --code-bg: #eceef2;
+
+  --font-display: "Avenir Next", "Sukhumvit Set", system-ui, sans-serif;
+  --font-body: "Sukhumvit Set", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "SF Mono", "Menlo", ui-monospace, monospace;
+
+  --rail: 12rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171b;
+    --bg-raise: #1d2027;
+    --bg-sink: #101216;
+    --line: #2c313b;
+    --line-soft: #23272f;
+    --fg: #e8eaed;
+    --fg-dim: #98a0ad;
+    --fg-faint: #6d7683;
+    --signal: #2ec9c1;
+    --signal-soft: rgba(46, 201, 193, .14);
+    --fault: #ff6b7d;
+    --fault-soft: rgba(255, 107, 125, .14);
+    --caution: #e0a53e;
+    --caution-soft: rgba(224, 165, 62, .14);
+    --code-bg: #14161a;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15171b; --bg-raise: #1d2027; --bg-sink: #101216;
+  --line: #2c313b; --line-soft: #23272f;
+  --fg: #e8eaed; --fg-dim: #98a0ad; --fg-faint: #6d7683;
+  --signal: #2ec9c1; --signal-soft: rgba(46,201,193,.14);
+  --fault: #ff6b7d; --fault-soft: rgba(255,107,125,.14);
+  --caution: #e0a53e; --caution-soft: rgba(224,165,62,.14);
+  --code-bg: #14161a;
+}
+:root[data-theme="light"] {
+  --bg: #f2f3f5; --bg-raise: #ffffff; --bg-sink: #e7e9ee;
+  --line: #d5d9e0; --line-soft: #e4e7ec;
+  --fg: #1a1d23; --fg-dim: #5f6874; --fg-faint: #8b939f;
+  --signal: #00807c; --signal-soft: rgba(0,128,124,.12);
+  --fault: #c62b41; --fault-soft: rgba(198,43,65,.12);
+  --caution: #8f6209; --caution-soft: rgba(143,98,9,.13);
+  --code-bg: #eceef2;
+}
+
+/* ─── base ──────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 3px; }
+
+.shell { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); gap: 0; }
+.rail-col { position: relative; }
+.main { max-width: 58rem; padding: 0 1.5rem 8rem; }
+@media (max-width: 60rem) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .rail-col { display: none; }
+  .main { padding: 0 1.15rem 6rem; }
+}
+
+/* ─── sticky rail ───────────────────────────────────────────────────────── */
+.rail {
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column; justify-content: center;
+  gap: .1rem; padding: 2rem 0 2rem 1.4rem;
+  font-family: var(--font-mono); font-size: .68rem;
+}
+.rail a {
+  display: flex; align-items: center; gap: .55rem;
+  color: var(--fg-faint); text-decoration: none;
+  padding: .22rem 0; letter-spacing: .04em;
+  transition: color .25s;
+}
+.rail a::before {
+  content: ""; width: 1.1rem; height: 1px; background: currentColor;
+  transition: width .25s, background .25s;
+}
+.rail a:hover { color: var(--fg-dim); }
+.rail a.on { color: var(--signal); }
+.rail a.on::before { width: 2rem; background: var(--signal); }
+
+/* ─── type ──────────────────────────────────────────────────────────────── */
+h1, h2, h3, .kicker { font-family: var(--font-display); }
+h1 {
+  font-size: clamp(2.1rem, 5.4vw, 3.5rem); line-height: 1.06;
+  letter-spacing: -.025em; font-weight: 600; margin: 0 0 1.1rem;
+  text-wrap: balance;
+}
+h2 {
+  font-size: clamp(1.4rem, 3vw, 1.95rem); line-height: 1.18;
+  letter-spacing: -.018em; font-weight: 600; margin: 0 0 .5rem;
+  text-wrap: balance;
+}
+h3 { font-size: 1.02rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.005em; }
+p { margin: .75rem 0; max-width: 40em; }
+.kicker {
+  font-family: var(--font-mono); font-size: .7rem; font-weight: 500;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--fg-faint);
+  margin: 0 0 .7rem;
+}
+.lede { font-size: 1.08rem; color: var(--fg-dim); max-width: 34em; }
+strong { font-weight: 600; }
+code {
+  font-family: var(--font-mono); font-size: .85em;
+  background: var(--code-bg); padding: .1em .34em; border-radius: 4px;
+  border: 1px solid var(--line-soft); word-break: break-word;
+}
+pre {
+  background: var(--code-bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: .9rem 1.05rem; overflow-x: auto;
+  font-size: .8rem; line-height: 1.62; margin: 1rem 0;
+  font-variant-numeric: tabular-nums;
+}
+pre code { background: none; border: none; padding: 0; font-size: inherit; }
+.c-del { color: var(--fault); }
+.c-add { color: var(--signal); }
+.c-dim { color: var(--fg-faint); }
+ul, ol { padding-inline-start: 1.3rem; max-width: 40em; }
+li { margin: .3rem 0; }
+
+/* ─── hero ──────────────────────────────────────────────────────────────── */
+.hero { padding: clamp(3rem, 9vh, 6.5rem) 0 3rem; }
+.hero-meta {
+  display: flex; flex-wrap: wrap; gap: .35rem .9rem;
+  font-family: var(--font-mono); font-size: .72rem; color: var(--fg-faint);
+  margin-top: 1.6rem; padding-top: 1.1rem; border-top: 1px solid var(--line);
+}
+.hero-meta b { color: var(--fg-dim); font-weight: 500; }
+
+/* ─── acts ──────────────────────────────────────────────────────────────── */
+.act { padding: clamp(2.5rem, 7vh, 5rem) 0; border-top: 1px solid var(--line); }
+.act-head { display: flex; align-items: baseline; gap: .8rem; margin-bottom: 1.4rem; }
+.act-id {
+  font-family: var(--font-mono); font-size: .74rem; color: var(--signal);
+  letter-spacing: .08em; padding-top: .35rem; flex: none;
+}
+
+/* reveal */
+.rv { opacity: 0; transform: translateY(14px); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.3,1); }
+.rv.in { opacity: 1; transform: none; }
+
+/* ─── stage (animated diagram frame) ────────────────────────────────────── */
+.stage {
+  background: var(--bg-raise); border: 1px solid var(--line);
+  border-radius: 12px; margin: 1.5rem 0; overflow: hidden;
+}
+.stage-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: .8rem;
+  padding: .6rem .9rem; border-bottom: 1px solid var(--line-soft);
+  background: var(--bg-sink);
+}
+.stage-title {
+  font-family: var(--font-mono); font-size: .7rem; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--fg-dim);
+}
+.replay {
+  font-family: var(--font-mono); font-size: .68rem; letter-spacing: .05em;
+  background: none; border: 1px solid var(--line); color: var(--fg-dim);
+  padding: .26rem .6rem; border-radius: 5px; cursor: pointer;
+  transition: color .2s, border-color .2s;
+}
+.replay:hover { color: var(--signal); border-color: var(--signal); }
+.stage-body { padding: 1.35rem .9rem 1.5rem; overflow-x: auto; }
+.stage-note {
+  padding: .7rem .95rem; border-top: 1px solid var(--line-soft);
+  font-size: .84rem; color: var(--fg-dim); background: var(--bg-sink);
+}
+
+/* generic diagram bits */
+.node {
+  font-family: var(--font-mono); font-size: .7rem; letter-spacing: .02em;
+  border: 1px solid var(--line); border-radius: 6px; padding: .42rem .6rem;
+  background: var(--bg); color: var(--fg-dim); white-space: nowrap;
+}
+.node.hot { border-color: var(--signal); color: var(--signal); }
+.node.bad { border-color: var(--fault); color: var(--fault); }
+.chunk {
+  width: 1.35rem; height: 1.35rem; border-radius: 4px; flex: none;
+  background: var(--signal-soft); border: 1px solid var(--signal);
+  color: var(--signal); font-family: var(--font-mono); font-size: .58rem;
+  display: grid; place-items: center;
+}
+.chunk.eos { background: transparent; border-style: dashed; border-color: var(--fg-faint); color: var(--fg-faint); }
+.lane {
+  display: flex; align-items: center; gap: .35rem;
+  min-height: 2.1rem; padding: .3rem .5rem;
+  border: 1px dashed var(--line); border-radius: 7px;
+}
+.lane-label {
+  font-family: var(--font-mono); font-size: .66rem; color: var(--fg-faint);
+  min-width: 8.5rem; flex: none;
+}
+.row { display: flex; align-items: center; gap: .55rem; flex-wrap: nowrap; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+
+@keyframes chunkIn { from { opacity: 0; transform: translateX(-1.6rem) scale(.7); } to { opacity: 1; transform: none; } }
+@keyframes pulseWait { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+@keyframes shrinkFit { to { transform: scale(var(--fit)); } }
+@keyframes fillUp { from { height: 0; } }
+@keyframes stampIn { from { opacity: 0; transform: scale(1.3) rotate(-6deg); } to { opacity: 1; transform: none; } }
+
+/* A — split consumers */
+.split-track { display: flex; flex-direction: column; gap: .55rem; min-width: 26rem; }
+.split .chunk { opacity: 0; }
+.split.play .chunk { animation: chunkIn .34s ease forwards; animation-delay: calc(var(--i) * .16s); }
+.verdict {
+  font-family: var(--font-mono); font-size: .68rem; padding: .18rem .5rem;
+  border-radius: 4px; opacity: 0; white-space: nowrap;
+}
+.split.play .verdict { animation: stampIn .4s ease forwards; animation-delay: calc(var(--i) * .16s + .25s); }
+.verdict.bad { background: var(--fault-soft); color: var(--fault); }
+.verdict.ok { background: var(--signal-soft); color: var(--signal); }
+
+/* B — hang timeline */
+.hang { min-width: 27rem; display: flex; flex-direction: column; gap: .75rem; }
+.hang .step { display: flex; align-items: center; gap: .6rem; opacity: .22; transition: opacity .45s; }
+.hang .step.on { opacity: 1; }
+.hang .chunk { transition: opacity .3s; }
+.buf {
+  font-family: var(--font-mono); font-size: .66rem; color: var(--signal);
+  border: 1px solid var(--signal); border-radius: 5px; padding: .3rem .55rem;
+  background: var(--signal-soft);
+}
+.waiting {
+  font-family: var(--font-mono); font-size: .68rem; color: var(--caution);
+  display: inline-flex; align-items: center; gap: .4rem;
+}
+.waiting .dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--caution); animation: pulseWait 1.1s infinite; }
+.clock { font-family: var(--font-mono); font-size: .72rem; color: var(--fault); font-variant-numeric: tabular-nums; }
+.outcome {
+  font-family: var(--font-mono); font-size: .74rem; padding: .35rem .65rem;
+  border-radius: 5px; display: inline-block;
+}
+.outcome.bad { background: var(--fault-soft); color: var(--fault); }
+.outcome.ok { background: var(--signal-soft); color: var(--signal); }
+
+/* C — copies */
+.copies { display: flex; align-items: flex-end; gap: .5rem; height: 9rem; min-width: 20rem; }
+.copybar { width: 3.1rem; display: flex; flex-direction: column; justify-content: flex-end; gap: .3rem; }
+.copybar .bar {
+  background: var(--fault-soft); border: 1px solid var(--fault); border-radius: 4px 4px 0 0;
+  height: 0; transition: height .55s cubic-bezier(.2,.8,.2,1), background .4s, border-color .4s;
+}
+.copies.play .copybar .bar { height: var(--h); }
+.copybar.keep .bar { background: var(--signal-soft); border-color: var(--signal); }
+.copybar .cap {
+  font-family: var(--font-mono); font-size: .58rem; color: var(--fg-faint);
+  text-align: center; line-height: 1.25;
+}
+.tally { font-family: var(--font-mono); font-size: 1.6rem; color: var(--fault); font-variant-numeric: tabular-nums; }
+.tally.ok { color: var(--signal); }
+
+/* D — fit box */
+.fitwrap { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.fitbox { position: relative; width: 12rem; height: 12rem; border: 1px dashed var(--fg-faint); border-radius: 4px; flex: none; }
+.fitbox .lim {
+  position: absolute; inset: auto .25rem .25rem auto;
+  font-family: var(--font-mono); font-size: .58rem; color: var(--fg-faint);
+}
+.img {
+  position: absolute; top: 50%; left: 0; transform-origin: left center;
+  translate: 0 -50%;
+  background: var(--signal-soft); border: 1px solid var(--signal); border-radius: 3px;
+  display: grid; place-items: center;
+  font-family: var(--font-mono); font-size: .58rem; color: var(--signal);
+}
+.fitbox.play .img.shrink { animation: shrinkFit 1s cubic-bezier(.3,.8,.2,1) .5s forwards; }
+
+/* E — validator gate */
+.gate { min-width: 22rem; display: flex; flex-direction: column; gap: .9rem; }
+.payload {
+  font-family: var(--font-mono); font-size: .68rem;
+  border: 1px solid var(--line); border-radius: 6px; padding: .5rem .65rem;
+  background: var(--bg); opacity: 0; transform: translateX(-1.5rem);
+  transition: opacity .45s, transform .45s;
+}
+.gate.play .payload { opacity: 1; transform: none; }
+.gate.play .payload.b { transition-delay: .9s; }
+
+/* F — tanks */
+.tanks { display: flex; gap: 1.8rem; flex-wrap: wrap; }
+.tank { width: 5.2rem; flex: none; }
+.tank .vessel {
+  position: relative; height: 9rem; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--bg); overflow: hidden;
+  display: flex; align-items: flex-end;
+}
+.tank .fluid { width: 100%; height: 0; transition: height 1.5s linear; }
+.tanks.play .tank .fluid { height: var(--fill); }
+.tank.over .fluid { background: var(--fault-soft); border-top: 2px solid var(--fault); }
+.tank.capped .fluid { background: var(--signal-soft); border-top: 2px solid var(--signal); }
+.tank .capline {
+  position: absolute; left: 0; right: 0; bottom: var(--cap);
+  border-top: 1px dashed var(--caution);
+}
+.tank .capline span {
+  position: absolute; right: .15rem; top: -1.05rem;
+  font-family: var(--font-mono); font-size: .55rem; color: var(--caution);
+}
+.tank .cap-label { font-family: var(--font-mono); font-size: .6rem; color: var(--fg-faint); margin-top: .45rem; line-height: 1.3; }
+
+/* ─── data blocks ───────────────────────────────────────────────────────── */
+.scroll { overflow-x: auto; margin: 1.1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: .86rem; min-width: 30rem; }
+th, td { text-align: start; padding: .52rem .7rem; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+th {
+  font-family: var(--font-mono); font-size: .64rem; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--fg-faint); font-weight: 500;
+  border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+tbody tr:last-child td { border-bottom: none; }
+td code { font-size: .78rem; }
+.num { font-variant-numeric: tabular-nums; }
+
+.card {
+  background: var(--bg-raise); border: 1px solid var(--line);
+  border-radius: 10px; padding: 1rem 1.15rem; margin: 1.1rem 0;
+}
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+.card.fault { border-left: 2px solid var(--fault); }
+.card.ok { border-left: 2px solid var(--signal); }
+.card.caution { border-left: 2px solid var(--caution); }
+
+.tag {
+  display: inline-block; font-family: var(--font-mono); font-size: .62rem;
+  letter-spacing: .07em; text-transform: uppercase; padding: .15rem .45rem;
+  border-radius: 4px; margin-inline-end: .4rem; vertical-align: .1em;
+}
+.tag.fault { background: var(--fault-soft); color: var(--fault); }
+.tag.ok { background: var(--signal-soft); color: var(--signal); }
+.tag.caution { background: var(--caution-soft); color: var(--caution); }
+
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .8rem; margin: 1.3rem 0; }
+.stat { background: var(--bg-raise); border: 1px solid var(--line); border-radius: 9px; padding: .85rem .9rem; }
+.stat .v { font-family: var(--font-display); font-size: 1.75rem; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.stat .k { font-family: var(--font-mono); font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; color: var(--fg-faint); margin-top: .4rem; }
+.stat.good .v { color: var(--signal); }
+.stat.bad .v { color: var(--fault); }
+
+footer.doc { border-top: 1px solid var(--line); padding-top: 1.3rem; margin-top: 3.5rem; font-size: .8rem; color: var(--fg-faint); }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .rv { opacity: 1; transform: none; transition: none; }
+  .split .chunk, .verdict, .payload { opacity: 1 !important; transform: none !important; animation: none !important; }
+  .copies .copybar .bar { height: var(--h) !important; transition: none; }
+  .hang .step { opacity: 1 !important; }
+  .fitbox .img.shrink { transform: scale(var(--fit)) !important; animation: none !important; }
+  .tank .fluid { height: var(--fill) !important; transition: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <div class="rail-col">
+    <nav class="rail" aria-label="สารบัญ">
+      <a href="#top">อาการ</a>
+      <a href="#rule">กฎของ stream</a>
+      <a href="#hang">แขวน</a>
+      <a href="#thumb">แย่ง chunk</a>
+      <a href="#copies">4 ก็อป</a>
+      <a href="#fit">ตรรกะ resize</a>
+      <a href="#fileid">422</a>
+      <a href="#log">log</a>
+      <a href="#cap">เพดาน</a>
+      <a href="#proof">ผลตรวจ</a>
+      <a href="#change">ที่เปลี่ยน</a>
+    </nav>
+  </div>
+
+  <main class="main">
+
+  <!-- ══ HERO ══ -->
+  <section class="hero" id="top">
+    <p class="kicker rv">uchat-api · room-file service</p>
+    <h1 class="rv">ไม่ใช่ memory leak<br>เป็น request ที่ไม่ยอมจบ</h1>
+    <p class="lede rv">รายงานเข้ามาว่า “resize รูปทุกใบ” และ “service กิน RAM” ผลที่ไล่ได้คือ
+    log บอกเรื่องที่ไม่ได้เกิดขึ้น ส่วน RAM ที่ไม่คืนมาจาก stream หนึ่งเส้นที่ถูกอ่านสองครั้ง
+    จนสัญญาณจบไม่เคยมาถึง</p>
+
+    <div class="stat-row rv">
+      <div class="stat bad"><div class="v" data-count="8">8</div><div class="k">ต้นเหตุที่พบ</div></div>
+      <div class="stat good"><div class="v" data-count="4">4</div><div class="k">ไฟล์ที่แตะ</div></div>
+      <div class="stat good"><div class="v" data-count="0">0</div><div class="k">เทสที่พังใหม่</div></div>
+      <div class="stat good"><div class="v">1×</div><div class="k">ก็อปในแรม (จาก 4×)</div></div>
+    </div>
+
+    <div class="hero-meta rv">
+      <span><b>branch</b> bugfix/room-file-image-upload-stream-and-notification-file-id</span>
+      <span><b>base</b> dev</span>
+      <span><b>สถานะ</b> verify แล้ว ยังไม่ commit</span>
+    </div>
+  </section>
+
+  <!-- ══ RULE ══ -->
+  <section class="act" id="rule">
+    <div class="act-head">
+      <span class="act-id rv">พื้นฐาน</span>
+      <h2 class="rv">stream มีคนอ่านได้คนเดียว</h2>
+    </div>
+    <p class="rv">3 ใน 8 ปัญหามาจากความเข้าใจผิดข้อเดียวกัน ต้องปูพื้นก่อน
+    <strong>stream ไม่ใช่ array ที่อ่านซ้ำได้</strong> มันคือท่อที่ byte ไหลผ่านครั้งเดียว
+    ถ้ามีสองคนมาดูด แต่ละคนได้ไปคนละส่วน — ไม่มีใครได้ครบ</p>
+
+    <div class="stage rv">
+      <div class="stage-bar">
+        <span class="stage-title">one stream, two consumers</span>
+        <button class="replay" data-replay="split1">▸ เล่นอีกครั้ง</button>
+      </div>
+      <div class="stage-body">
+        <div class="grid2">
+          <div>
+            <div class="split split-track" id="split1" data-anim>
+              <div class="lane"><span class="lane-label">stream (8 chunks)</span>
+                <span class="chunk" style="--i:0">1</span><span class="chunk" style="--i:1">2</span>
+                <span class="chunk" style="--i:2">3</span><span class="chunk" style="--i:3">4</span>
+                <span class="chunk" style="--i:4">5</span><span class="chunk" style="--i:5">6</span>
+                <span class="chunk" style="--i:6">7</span><span class="chunk" style="--i:7">8</span>
+              </div>
+              <div class="lane"><span class="lane-label">consumer A · putObject</span>
+                <span class="chunk" style="--i:8">1</span><span class="chunk" style="--i:10">3</span>
+                <span class="chunk" style="--i:12">5</span><span class="chunk" style="--i:14">7</span>
+                <span class="verdict bad" style="--i:15">ได้ครึ่ง → ไฟล์พัง</span>
+              </div>
+              <div class="lane"><span class="lane-label">consumer B · thumbnail</span>
+                <span class="chunk" style="--i:9">2</span><span class="chunk" style="--i:11">4</span>
+                <span class="chunk" style="--i:13">6</span><span class="chunk" style="--i:15">8</span>
+                <span class="verdict bad" style="--i:16">ได้ครึ่ง → ภาพพัง</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="split split-track" id="split2" data-anim>
+              <div class="lane"><span class="lane-label">buffer ก้อนเดียว</span>
+                <span class="node hot">fileBuffer</span>
+              </div>
+              <div class="lane"><span class="lane-label">Readable.from() #1</span>
+                <span class="chunk" style="--i:0">1</span><span class="chunk" style="--i:1">2</span>
+                <span class="chunk" style="--i:2">3</span><span class="chunk" style="--i:3">4</span>
+                <span class="chunk" style="--i:4">5</span><span class="chunk" style="--i:5">6</span>
+                <span class="chunk" style="--i:6">7</span><span class="chunk" style="--i:7">8</span>
+                <span class="verdict ok" style="--i:8">ครบ</span>
+              </div>
+              <div class="lane"><span class="lane-label">Readable.from() #2</span>
+                <span class="chunk" style="--i:0">1</span><span class="chunk" style="--i:1">2</span>
+                <span class="chunk" style="--i:2">3</span><span class="chunk" style="--i:3">4</span>
+                <span class="chunk" style="--i:4">5</span><span class="chunk" style="--i:5">6</span>
+                <span class="chunk" style="--i:6">7</span><span class="chunk" style="--i:7">8</span>
+                <span class="verdict ok" style="--i:8">ครบ</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="stage-note"><strong>ทางแก้ที่ใช้ทั้งงานนี้</strong> — buffer ไว้ก้อนเดียว
+      แล้ว <code>Readable.from(buffer)</code> ใหม่ทุกครั้งที่ต้องการ consumer เพิ่ม
+      ไม่ใช้ clone library ที่ไม่ทำ backpressure</p>
+    </div>
+
+    <div class="card rv">
+      <h3>กฎข้อ 2 — <code>sharp</code> instance ใช้ได้ท่าเดียว</h3>
+      <p><code>sharp()</code> เป็น Duplex เอา output ได้ 2 วิธี และ <strong>เลือกได้อย่างเดียว</strong></p>
+<pre><code><span class="c-dim">// วิธี A — pipe ต่อ</span>
+inputStream.pipe(sharp().resize(...)).pipe(outputStream);
+
+<span class="c-dim">// วิธี B — เอาเป็น buffer</span>
+const buf = await sharp(inputBuffer).resize(...).toBuffer();</code></pre>
+    </div>
+  </section>
+
+  <!-- ══ P1 HANG ══ -->
+  <section class="act" id="hang">
+    <div class="act-head">
+      <span class="act-id rv">P1</span>
+      <h2 class="rv">ทำทั้งสองท่า → สัญญาณจบไม่เคยมา</h2>
+    </div>
+    <p class="rv">โค้ดเดิมใน <code>imageFileProcess</code> เรียก <code>toBuffer()</code> กับ sharp
+    เพื่อหา width/height แล้ว<strong>ส่ง instance ตัวเดิม</strong>ให้ <code>putObject</code> pipe ต่อ</p>
+
+<pre class="rv"><code><span class="c-dim">// 1. สร้าง sharp pipeline (Duplex 1 ตัว)</span>
+cloneStream = await this.resizeImageFile(cloneStream, width, height);
+
+<span class="c-dim">// 2. ดึง output เป็น buffer เพื่อหา dimension</span>
+<span class="c-del">const imageBuffer = await cloneStream.toBuffer();   // ← วิธี B</span>
+
+<span class="c-dim">// 3. ส่ง Duplex ตัวเดิมไปให้ putObject</span>
+<span class="c-del">objectToReturn.pipe = cloneStream;                  // ← วิธี A กับตัวเดิม</span></code></pre>
+
+    <div class="stage rv">
+      <div class="stage-bar">
+        <span class="stage-title">ลูกโซ่ของการแขวน</span>
+        <button class="replay" data-replay="hang1">▸ เล่นอีกครั้ง</button>
+      </div>
+      <div class="stage-body">
+        <div class="hang" id="hang1" data-anim>
+          <div class="step" data-s="1"><span class="node">Readable</span>
+            <span class="chunk">1</span><span class="chunk">2</span><span class="chunk">3</span>
+            <span class="node hot">sharp resize</span></div>
+          <div class="step" data-s="2"><span class="node">toBuffer()</span>
+            <span class="buf">16,469 B ✓ ได้ dimension</span></div>
+          <div class="step" data-s="3"><span class="node bad">putObject pipe สายเดิม</span>
+            <span class="chunk">1</span><span class="chunk">2</span><span class="chunk">3</span>
+            <span class="chunk eos">end</span></div>
+          <div class="step" data-s="4"><span class="waiting"><span class="dot"></span>NATS รอ end-of-stream packet</span>
+            <span class="clock" id="hangClock">0.0s</span></div>
+          <div class="step" data-s="5"><span class="outcome bad">REQUEST TIMEOUT — buffer ทุกก้อนค้างใน heap ตลอด</span></div>
+        </div>
+      </div>
+      <p class="stage-note"><code>data</code> ยังไหลออกมาได้ครบ 16,469 byte แต่ event
+      <code>end</code> <strong>ไม่ยิงเลย</strong> — นี่คือจุดตาย เพราะอาการไม่ใช่ error
+      แต่เป็นการแขวนเงียบ ๆ ซึ่งหายากกว่ามาก</p>
+    </div>
+
+    <div class="card fault rv">
+      <h3>รีโปรกับ sharp ตัวจริง</h3>
+<pre><code>src bytes 70770
+toBuffer bytes 16470
+second consume bytes 16470
+<span class="c-del">TIMEOUT: stream never ended -&gt; putObject would hang/empty</span></code></pre>
+    </div>
+
+    <div class="card ok rv">
+      <h3>แก้: buffer in → buffer out</h3>
+      <p><code>uploadFileV3</code> ถือไฟล์ทั้งก้อนใน memory อยู่แล้ว การ stream ไม่ได้ประหยัดอะไร
+      เปลี่ยนเป็นตัวแปรเดียวไล่แปลงทีละขั้น แล้วปิดท้ายด้วย stream ใหม่สด ๆ</p>
+<pre><code><span class="c-dim">// ทุกขั้นเขียนทับ buffer เดิม → ถือ byte ที่จะขึ้น S3 เสมอ</span>
+let processedBuffer: Buffer = buffer;
+
+if (this.isImageWithinResizeLimit(width, height)) {
+  this.logger.info(`Skip image resize: ...`);
+} else {
+  <span class="c-add">processedBuffer = await this.resizeImageBuffer(processedBuffer, processedMimeType);</span>
+}
+
+<span class="c-dim">// stream ใหม่ที่ยังไม่มีใครอ่าน</span>
+<span class="c-add">objectToReturn.pipe = Readable.from(processedBuffer);</span></code></pre>
+      <p><strong>ผล</strong> — <code>emittedEnd</code> เปลี่ยนจาก <code>false</code> (แขวน) เป็น
+      <code>true</code> ทุกเคส และ buffer ถูก GC ตามปกติเมื่อ request จบ</p>
+    </div>
+  </section>
+
+  <!-- ══ P2 THUMB ══ -->
+  <section class="act" id="thumb">
+    <div class="act-head">
+      <span class="act-id rv">P2</span>
+      <h2 class="rv"><code>createThumbnail</code> แย่ง chunk กับ <code>putObject</code></h2>
+    </div>
+    <p class="rv">บั๊กเดียวกับ animation แรก แต่เกิดจริงในโค้ด — สอง consumer บน stream เดียว
+    ใน <code>Promise.all</code> เดียวกัน</p>
+
+<pre class="rv"><code>const uploadFile = ctx.call("file.putObject", fileStreamToUpload, {...});   <span class="c-dim">// consumer #1</span>
+
+const processFileAfterUploaded = async (fileType) =&gt; {
+  case FILE_TYPE.VIDEO:
+    <span class="c-del">await this.createThumbnail(fileStreamToUpload, ...);                    // consumer #2</span>
+};
+
+await Promise.all([uploadFile, processFileAfterUploaded(roomFileData.fileType)]);
+<span class="c-dim">//                 ^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^ ทำงานพร้อมกัน</span></code></pre>
+
+<pre class="rv"><code><span class="c-add">await this.createThumbnail(Readable.from(fileBuffer), roomFileData);</span>
+<span class="c-dim">// และแก้ signature ที่โกหกไว้: fs.ReadStream → Readable
+// ไม่มี caller ไหนส่ง fs.ReadStream มาเลย มันรอดเพราะ caller เป็น any</span></code></pre>
+
+    <div class="card caution rv">
+      <p><span class="tag caution">behavior change</span>video/file ที่ FE ไม่ส่ง
+      <code>thumbnailId</code> มา จะได้ thumbnail จริง — เดิม <code>createThumbnail</code>
+      มักพังแล้วโดน <code>catch</code> กลืน response shape เดิม แต่ field ที่เคยว่างจะมีค่า</p>
+    </div>
+  </section>
+
+  <!-- ══ P3 COPIES ══ -->
+  <section class="act" id="copies">
+    <div class="act-head">
+      <span class="act-id rv">P3</span>
+      <h2 class="rv">ไฟล์ 1 ก้อน กลายเป็น 4 ก็อปในแรม</h2>
+    </div>
+    <p class="rv">โค้ดเดิมสร้าง clone 3 ตัวจาก stream เดียว บวก buffer ที่อ่านไว้
+    ต้นเหตุอยู่ใน source ของ <code>readable-stream-clone@0.0.7</code></p>
+
+<pre class="rv"><code>readableStream.on("data", function(chunk) {
+    <span class="c-del">me.push(chunk);          // ทิ้งค่า return ของ push()</span>
+});
+<span class="c-del">me._read = function() {};    // no-op</span></code></pre>
+
+    <p class="rv"><code>push()</code> คืน <code>false</code> เมื่อ buffer เต็ม = สัญญาณ “หยุดส่งก่อน”
+    โค้ดนี้ไม่สนใจ และ <code>_read</code> ก็ไม่มีกลไก pull รวมกันแปลว่า
+    <strong>ไม่มี backpressure</strong> — clone ที่ยังไม่มีคนอ่าน = ไฟล์เต็มก้อน 1 ชุดใน RAM</p>
+
+    <div class="stage rv">
+      <div class="stage-bar">
+        <span class="stage-title">ก็อปต่อ 1 upload</span>
+        <button class="replay" data-replay="copies1">▸ เล่นอีกครั้ง</button>
+      </div>
+      <div class="stage-body">
+        <div class="row" style="gap:2rem; align-items:flex-end;">
+          <div>
+            <div class="copies" id="copies1" data-anim>
+              <div class="copybar keep"><div class="bar" style="--h:100%"></div><div class="cap">fileBuffer</div></div>
+              <div class="copybar"><div class="bar" style="--h:100%"></div><div class="cap">clone<br>mime</div></div>
+              <div class="copybar"><div class="bar" style="--h:100%"></div><div class="cap">clone<br>upload</div></div>
+              <div class="copybar"><div class="bar" style="--h:100%"></div><div class="cap">clone<br>check</div></div>
+            </div>
+            <div class="tally" id="tally1" style="margin-top:.6rem">4×</div>
+          </div>
+          <div>
+            <div class="copies play">
+              <div class="copybar keep"><div class="bar" style="--h:100%"></div><div class="cap">fileBuffer</div></div>
+            </div>
+            <div class="tally ok" style="margin-top:.6rem">1×</div>
+          </div>
+        </div>
+      </div>
+      <p class="stage-note">ตัวที่เจ็บสุดคือ <code>cloneStreamForUpload</code> — เคสรูป
+      <strong>ไม่เคยถูกอ่านเลย</strong> เพราะใช้ <code>data.pipe</code> แทน
+      มันแค่ค้างไฟล์อีกก้อนรอ GC</p>
+    </div>
+
+    <p class="rv">แก้โดยอ่านครั้งเดียว แล้วให้ทุกขั้นถัดไปใช้ buffer ก้อนนั้น</p>
+<pre class="rv"><code><span class="c-del">- const checkMimeType = await fromStream(cloneStreamForCheckMimeType);</span>
+<span class="c-add">+ const checkMimeType = await fromBuffer(fileBuffer);</span>
+
+<span class="c-del">- const fileStreamToUpload = data.pipe || cloneStreamForUpload;</span>
+<span class="c-add">+ const fileStreamToUpload: Readable = data.pipe ?? Readable.from(fileBuffer);</span></code></pre>
+
+    <div class="card ok rv">
+      <h3>พิสูจน์ว่า <code>fromBuffer</code> ให้ผลเท่า <code>fromStream</code></h3>
+<pre><code>jpeg           bytes=   279  fromBuffer=image/jpeg  fromStream=image/jpeg  SAME
+png            bytes=   142  fromBuffer=image/png   fromStream=image/png   SAME
+webp           bytes=    80  fromBuffer=image/webp  fromStream=image/webp  SAME
+tiff           bytes=   566  fromBuffer=image/tiff  fromStream=image/tiff  SAME
+gif            bytes=    74  fromBuffer=image/gif   fromStream=image/gif   SAME
+tiny-8-bytes   bytes=     8  fromBuffer=image/jpeg  fromStream=image/jpeg  SAME
+
+<span class="c-add">mime detection: EQUIVALENT</span></code></pre>
+      <p>เคส <code>tiny-8-bytes</code> จงใจใส่ไว้ — กันข้อกังวลว่า <code>fromBuffer</code>
+      อาจต้องการ byte ขั้นต่ำ</p>
+    </div>
+
+    <div class="card rv">
+      <h3>บวก sharp tuning ตอน service start</h3>
+<pre><code>sharp.cache({ memory: SHARP_CACHE_MEMORY_MB, files: 0, items: 0 });
+
+if (SHARP_CONCURRENCY &gt; 0) {
+  sharp.concurrency(SHARP_CONCURRENCY);
+}</code></pre>
+      <p><strong><code>files: 0, items: 0</code></strong> เพราะทุก upload คือรูปใหม่ไม่ซ้ำกัน
+      cache จึงไม่เคย hit มีแต่ค้าง decoded pixel กิน RSS เปล่า ๆ</p>
+      <p><strong>concurrency ต้อง opt-in</strong> (default <code>0</code> = ไม่แตะของ sharp)
+      เพราะลด thread = resize รูปเดียว<em>ช้าลง</em> ซึ่งสวนทางกับที่กำลังแก้เรื่อง upload ช้า</p>
+<pre><code>cpus=11
+default concurrency  = 11
+after concurrency(2) = 2
+<span class="c-del">after concurrency(0) = 2   ← ไม่กลับเป็น 11</span></code></pre>
+      <p>เช็คแล้วผิดคาด: <code>sharp.concurrency(0)</code> ไม่ reset กลับเป็น CPU count
+      ฉะนั้น guard ต้องอยู่ในโค้ดเรา ไม่ใช่โยนให้ sharp</p>
+    </div>
+  </section>
+
+  <!-- ══ P4 FIT ══ -->
+  <section class="act" id="fit">
+    <div class="act-head">
+      <span class="act-id rv">P4</span>
+      <h2 class="rv">เงื่อนไข skip resize ใช้ <code>||</code> แทน <code>&amp;&amp;</code></h2>
+    </div>
+    <p class="rv"><code>fit: "inside"</code> คือ “ย่อจนภาพ<strong>ทั้งใบ</strong>อยู่ในกรอบ”
+    ฉะนั้นจะ skip ได้ต้องผ่านทั้งสองด้าน ใช้ <code>||</code> แปลว่าผ่านด้านเดียวก็ skip</p>
+
+    <div class="stage rv">
+      <div class="stage-bar">
+        <span class="stage-title">ภาพ 4000 × 1000 กับกรอบ 1920 × 1920</span>
+        <button class="replay" data-replay="fit1">▸ เล่นอีกครั้ง</button>
+      </div>
+      <div class="stage-body">
+        <div class="fitwrap" id="fit1" data-anim>
+          <div>
+            <div class="fitbox">
+              <span class="lim">1920×1920</span>
+              <div class="img" style="width:25rem; height:3rem;">4000 × 1000</div>
+            </div>
+            <p style="font-size:.8rem; margin:.7rem 0 0"><code class="c-del">||</code>
+            → height 1000 ≤ 1920 ผ่านด้านเดียว → <strong>skip</strong><br>
+            <span style="color:var(--fault)">อัปโหลดของเดิมกว้าง 4000px ขึ้น S3</span></p>
+          </div>
+          <div>
+            <div class="fitbox">
+              <span class="lim">1920×1920</span>
+              <div class="img shrink" style="width:25rem; height:3rem; --fit:.48;">4000 × 1000</div>
+            </div>
+            <p style="font-size:.8rem; margin:.7rem 0 0"><code class="c-add">&amp;&amp;</code>
+            → width 4000 &gt; 1920 ไม่ผ่าน → <strong>resize</strong><br>
+            <span style="color:var(--signal)">1920 × 480 ตามเจตนา</span></p>
+          </div>
+        </div>
+      </div>
+      <p class="stage-note">ข้อสังเกตที่ควรพูดให้ชัด — บั๊กนี้ทำให้ระบบ resize
+      <strong>น้อยกว่า</strong>ที่ควร ไม่ใช่มากกว่า ตรงข้ามกับอาการที่รายงานเข้ามา</p>
+    </div>
+
+<pre class="rv"><code>@Method
+isImageWithinResizeLimit(width?: number | string, height?: number | string): boolean {
+  const numericWidth = typeof width === "number" ? width : <span class="c-add">Number.parseFloat</span>(String(width ?? ""));
+  const numericHeight = typeof height === "number" ? height : <span class="c-add">Number.parseFloat</span>(String(height ?? ""));
+
+  if (!Number.isFinite(numericWidth) || !Number.isFinite(numericHeight) || numericWidth &lt;= 0 || numericHeight &lt;= 0) {
+    return false;
+  }
+
+  return numericWidth &lt;= LIMIT_IMAGE_WIDTH <span class="c-add">&amp;&amp;</span> numericHeight &lt;= LIMIT_IMAGE_HEIGHT;
+}</code></pre>
+    <p class="rv">อีกจุด — <code>Number.parseFloat</code> ไม่ใช่ปล่อยให้ JS coerce
+    เพราะค่ามาจาก <code>$multipart</code> ที่ส่งทุก field เป็น <strong>string</strong>
+    ของเดิมรอดเพราะ <code>"1080" &lt;= 1920</code> JS แปลงให้เอง แต่พึ่ง implicit coercion
+    กับ input ที่ควบคุมไม่ได้เป็นเรื่องเปราะ</p>
+  </section>
+
+  <!-- ══ P5 FILEID ══ -->
+  <section class="act" id="fileid">
+    <div class="act-head">
+      <span class="act-id rv">P5</span>
+      <h2 class="rv"><code>files</code> เป็น object แต่ helper ส่งเป็น string</h2>
+    </div>
+    <p class="rv">คำใบ้อยู่ที่ <code>actual: [Object]</code> ใน log — ส่ง object
+    ไปในที่ที่ต้องการ string</p>
+
+    <div class="stage rv">
+      <div class="stage-bar">
+        <span class="stage-title">4 ขั้นสู่ 422</span>
+        <button class="replay" data-replay="gate1">▸ เล่นอีกครั้ง</button>
+      </div>
+      <div class="stage-body">
+        <div class="gate" id="gate1" data-anim>
+          <div class="payload">
+            <span style="color:var(--fg-faint)">1 ·</span> reactMessageEmojiV2 →
+            populateMessageData(…, <span style="color:var(--caution)">["files"]</span>)
+          </div>
+          <div class="payload">
+            <span style="color:var(--fg-faint)">2 ·</span> files:
+            <span class="c-del">string[]</span> → <span class="c-del">IRoomFileBaseOutDto[]</span>
+          </div>
+          <div class="payload b">
+            <span style="color:var(--fg-faint)">3 ·</span> call getPublicUrlByAccountId
+            { fileId: <span class="c-del">{ _id, fileId, url, … }</span> }
+          </div>
+          <div class="payload b">
+            <span style="color:var(--fg-faint)">4 ·</span> validator
+            <code>fileId: { type: "string" }</code>
+            <span class="verdict bad" style="opacity:1">422 VALIDATION_ERROR</span>
+          </div>
+        </div>
+      </div>
+      <p class="stage-note">ผลกระทบจริง — react รูปแล้ว push notification
+      <strong>ยังส่ง แต่ไม่มีรูป preview</strong> เพราะ error ถูก <code>catch</code> กลืน
+      แล้ว <code>fileUrl</code> เหลือ null</p>
+    </div>
+
+    <div class="scroll rv">
+      <table>
+        <caption style="text-align:start; font-size:.8rem; color:var(--fg-dim); padding:0 0 .6rem">ทำไมเส้นอื่นไม่พัง</caption>
+        <thead><tr><th>caller</th><th>ทำไมรอด</th></tr></thead>
+        <tbody>
+          <tr><td><code>editMessageV2</code></td><td>เซ็ต type เป็น <code>EDITED</code> ก่อน → ไม่เข้า branch IMAGE</td></tr>
+          <tr><td><code>unsendMessagesV3</code></td><td>type เป็น <code>UNSENT</code></td></tr>
+          <tr><td><code>message-process-consumer</code> (V3)</td><td>ใช้ <code>message.files?.map(String)</code> จาก entity ดิบ — ถูกอยู่แล้ว</td></tr>
+          <tr><td><code>reactMessageEmojiV2</code></td><td><span class="tag fault">พัง</span>populate <code>files</code> แล้วส่งเข้า helper</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card ok rv">
+      <h3>แก้ที่ helper จุดเดียว ไม่ไปแก้ caller</h3>
+      <p>เพราะ caller ทั้งสองแบบมีเหตุผลของตัวเอง (บางเส้น populate เพื่อส่งต่อ socket)
+      และแก้ที่ helper กัน caller ใหม่ในอนาคตเผลอทำผิดซ้ำได้ด้วย</p>
+<pre><code>export function toRoomFileIdString(file: unknown): string | null {
+  if (typeof file === "string") return file || null;
+
+  if (file &amp;&amp; typeof file === "object") {
+    const candidate = "_id" in file || "fileId" in file
+      ? ((file as { _id?: unknown })._id ?? (file as { fileId?: unknown }).fileId)
+      : file;                          <span class="c-dim">// bare ObjectId</span>
+
+    if (candidate === null || candidate === undefined) return null;
+    const normalized = String(candidate);
+    return normalized &amp;&amp; normalized !== "[object Object]" ? normalized : null;
+  }
+
+  return null;
+}</code></pre>
+      <p><strong>ทำไม <code>_id</code> ก่อน <code>fileId</code></strong> — ปลายทางตีความ
+      ค่าที่ยาวเกิน 24 ตัวเป็นชื่อ object บน S3 ใช้ได้ทั้งคู่ แต่ <code>_id</code>
+      เป็น key ที่ไม่กำกวม</p>
+    </div>
+  </section>
+
+  <!-- ══ P6 P7 LOG ══ -->
+  <section class="act" id="log">
+    <div class="act-head">
+      <span class="act-id rv">P6 · P7</span>
+      <h2 class="rv">log บอกเรื่องที่ไม่ได้เกิด</h2>
+    </div>
+    <p class="rv"><code>Start image resize</code> ยิงเป็นบรรทัดแรกของ <code>imageFileProcess</code>
+    <strong>ก่อนเช็คเงื่อนไขอะไรเลย</strong> จึงขึ้นทุกรูปแม้ sharp ไม่ได้ทำงาน —
+    นี่คือสาเหตุที่รายงานเข้ามาว่า “resize ทุกรูป”</p>
+
+<pre class="rv"><code><span class="c-del">- Start image resize: 674c26c4..._e5f419d8.jpeg.</span>
+
+<span class="c-dim"># resize จริง</span>
+<span class="c-add">+ Start image resize: 674c26c4..._e5f419d8.jpeg. width=4000 height=3000 limit=1920x1920</span>
+<span class="c-add">+ Resize image complete: 674c26c4..._e5f419d8.jpeg. bytes=70769-&gt;16469</span>
+
+<span class="c-dim"># ไม่ต้อง resize — บอกเหตุผลด้วย</span>
+<span class="c-add">+ Skip image resize: 674c26c4..._0e90bbfb.jpeg. reason=within-limit width=1080 height=1440 limit=1920x1920</span></code></pre>
+
+    <div class="card rv">
+      <h3>P7 — <code>fileSize</code> ใน DB ไม่ตรงกับไฟล์บน S3</h3>
+      <p><code>compressedBuffer</code> กับสายที่ถูก resize เป็นคนละเส้นกัน jpeg/png
+      จึงได้ขนาด<em>ต้นฉบับ</em>ลง DB แก้ไปพร้อม P1 อยู่แล้ว — เมื่อทุกขั้นเขียนทับ
+      <code>processedBuffer</code> ตัวเดียว ค่าที่ได้ก็คือ byte จริงที่ขึ้น S3</p>
+    </div>
+  </section>
+
+  <!-- ══ P8 CAP ══ -->
+  <section class="act" id="cap">
+    <div class="act-head">
+      <span class="act-id rv">P8</span>
+      <h2 class="rv">cap การอ่าน ไม่ใช่เชื่อตัวเลขจาก client</h2>
+    </div>
+    <p class="rv">ลำดับเดิมคืออ่านไฟล์เต็มก้อนเข้า heap ก่อน แล้วค่อยเช็คขนาด
+    วิดีโอ 900 MB จึงถูกดูดเข้า memory ครบก่อนแล้วค่อยโดนปฏิเสธ — ด่านนั้นกัน S3
+    กับ DB ได้ แต่กัน RAM ไม่ได้</p>
+
+    <div class="card caution rv">
+      <h3><span class="tag caution">ทางที่ลองแล้วทิ้ง</span>เช็ค <code>$multipart.fileSize</code> ก่อนอ่าน</h3>
+      <p><strong>ผิด</strong> เพราะค่านั้น client ส่งมา และโค้ดเดิมเองก็ปฏิบัติกับมันเป็นแค่ fallback
+      (<code>fileSize = fileBuffer.length || fileSize || 0</code>) ถ้า FE แจ้งขนาด
+      <em>ก่อน</em>บีบอัด ไฟล์ที่วันนี้อัปได้จะถูกปฏิเสธ = <strong>flow เปลี่ยน</strong> ซึ่งห้าม</p>
+    </div>
+
+    <div class="stage rv">
+      <div class="stage-bar">
+        <span class="stage-title">buffer จนล้น vs หยุดที่เพดาน</span>
+        <button class="replay" data-replay="tanks1">▸ เล่นอีกครั้ง</button>
+      </div>
+      <div class="stage-body">
+        <div class="tanks" id="tanks1" data-anim>
+          <div class="tank over" style="--fill:100%; --cap:22%">
+            <div class="vessel"><div class="capline"><span>20 MB</span></div><div class="fluid"></div></div>
+            <div class="cap-label"><span style="color:var(--fault)">เดิม</span><br>อ่านครบ 900 MB<br>แล้วค่อย reject</div>
+          </div>
+          <div class="tank capped" style="--fill:22%; --cap:22%">
+            <div class="vessel"><div class="capline"><span>20 MB</span></div><div class="fluid"></div></div>
+            <div class="cap-label"><span style="color:var(--signal)">ใหม่</span><br>MaxBufferError<br>+ destroy()</div>
+          </div>
+        </div>
+      </div>
+      <p class="stage-note"><code>get-stream@6.0.1</code> รองรับ option <code>maxBuffer</code>
+      และ export <code>MaxBufferError</code> มาให้อยู่แล้ว</p>
+    </div>
+
+<pre class="rv"><code>const readSizeLimit = <span class="c-add">this.resolveUploadSizeLimit(fileType, canUseLargeFileUpload)</span>;
+let fileBuffer: Buffer;
+try {
+  fileBuffer = await getStream.buffer(ctx.params, <span class="c-add">{ maxBuffer: readSizeLimit }</span>);
+} catch (error) {
+  if (error instanceof getStream.MaxBufferError) {
+    <span class="c-dim">// ไม่มีใครอ่าน body ต่อ — ตัดทิ้งไม่ให้ transit สะสม chunk</span>
+    if (typeof ctx.params?.destroy === "function") ctx.params.destroy();
+    <span class="c-dim">// re-dispatch เกินเพดาน 1 byte → client ได้ error ชนิดเดิม</span>
+    <span class="c-add">this.enforceUploadSizeLimit(readSizeLimit + 1, fileType, canUseLargeFileUpload);</span>
+  }
+  throw error;
+}</code></pre>
+
+    <div class="card ok rv">
+      <h3>ทำไมวิธีนี้ไม่เปลี่ยน flow</h3>
+      <p><code>maxBuffer</code> ใช้ <strong>เพดานเดียวกัน</strong> กับด่านที่เช็คขนาดอยู่แล้ว
+      ฉะนั้นไฟล์ที่วันนี้อัปสำเร็จ = อยู่ใต้เพดาน = อ่านครบเหมือนเดิม
+      ไฟล์ที่เกิน = โดนปฏิเสธด้วย error ชนิดเดิม แค่ไม่ต้อง buffer ให้ครบก่อน</p>
+<pre><code>exactly at cap         declared=20971520  read=20971520  -&gt; PASS (read in full)
+just under cap         declared=20971519  read=20971519  -&gt; PASS (read in full)
+just over cap          declared=20971521  threw=MaxBufferError  destroyed=true  -&gt; PASS (rejected, not truncated)
+far over cap (200MB)   declared=209715200 threw=MaxBufferError  destroyed=true  -&gt; PASS (rejected, not truncated)</code></pre>
+      <ol>
+        <li><strong>ที่เพดานพอดี อ่านครบ</strong> — ไม่มี off-by-one ที่ปฏิเสธไฟล์ถูกกฎ
+        (ด่านเดิม <code>fileSize &gt; limit</code> ปฏิเสธ, <code>maxBuffer: limit</code>
+        ยอมรับ limit พอดี = ตรงกัน)</li>
+        <li><strong>เกินแล้ว throw ไม่ใช่ตัดทิ้งเงียบ</strong> — ถ้าตัดเงียบ
+        เราจะอัปไฟล์พังขึ้น S3 โดยไม่รู้ตัว ซึ่งแย่กว่าปัญหาเดิม</li>
+      </ol>
+    </div>
+
+    <div class="scroll rv">
+      <table>
+        <caption style="text-align:start; font-size:.8rem; color:var(--fg-dim); padding:0 0 .6rem">เพดาน ก่อน/หลัง เมื่อ <code>canUseLargeFileUpload = true</code> (เคสจริงบน production)</caption>
+        <thead><tr><th>type</th><th>ก่อน</th><th>หลัง</th></tr></thead>
+        <tbody>
+          <tr><td>FILE &gt; 10 MB</td><td><code>MustUsePresignUrlError</code> หลัง buffer</td><td><code>MustUsePresignUrlError</code> · cap 10 MB</td></tr>
+          <tr><td>VIDEO &gt; 10 MB</td><td><code>MustUsePresignUrlError</code> หลัง buffer</td><td><code>MustUsePresignUrlError</code> · cap 10 MB</td></tr>
+          <tr><td><strong>IMAGE</strong></td><td><span class="tag fault">ไม่เช็คเลย</span></td><td><strong>≤ 20 MB</strong> → <code>FileUploadIsTooLargeError</code></td></tr>
+          <tr><td>AUDIO / ไม่ส่ง <code>type</code></td><td><span class="tag fault">ไม่เช็คเลย</span></td><td>≤ 100 MB</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card rv">
+      <p><strong>20 MB ของ IMAGE ไม่ใช่นโยบายใหม่</strong> — branch <code>flag OFF</code>
+      ใช้ <code>UPLOAD_IMAGE_SIZE_LIMIT_MB</code> (20 MB) อยู่แล้ว และ branch
+      <code>isOriginal</code> ก็ cap 20 MB พร้อม comment <em>“regardless of account feature
+      flag”</em> การแก้นี้แค่ทำให้ branch <code>flag ON</code> สอดคล้องกับอีกสองอัน</p>
+      <p>และ IMAGE ต้อง <strong>cap</strong> ไม่ใช่ <strong>redirect ไป presign</strong> เพราะ
+      <code>initUploadPresignUrls</code> รับแค่ FILE กับ VIDEO — โยนรูปไป presign จะเป็นทางตัน</p>
+    </div>
+  </section>
+
+  <!-- ══ PROOF ══ -->
+  <section class="act" id="proof">
+    <div class="act-head">
+      <span class="act-id rv">ผล</span>
+      <h2 class="rv">วัดอย่างไรว่าไม่ทำอะไรพัง</h2>
+    </div>
+
+    <div class="card ok rv">
+      <h3>Unit test — diff รายชื่อ ไม่ใช่นับจำนวน</h3>
+<pre><code>baseline (dev สะอาด) : 23 failed / 56 passed
+หลังแก้              : 23 failed / 56 passed
+<span class="c-add">diff รายชื่อเทสที่ fail: IDENTICAL — ไม่มี failure ใหม่</span></code></pre>
+      <p>วิธีวัด: <code>git stash</code> เอาโค้ดกลับเป็น dev สะอาด → รันเก็บ<em>รายชื่อ</em>เทสที่ fail →
+      <code>git stash pop</code> → รันอีกรอบ → <code>diff</code> รายชื่อ
+      <strong>เพราะจำนวนเท่ากันแต่คนละตัวก็เป็นไปได้</strong></p>
+      <p>23 ตัวที่ fail มาก่อนแล้วเป็น stale spec — กลุ่ม <code>uploadFileV3</code>
+      ยังไม่รู้จัก <code>isVoiceMessage: false</code> ที่เพิ่มเข้ามาทีหลัง และกลุ่ม VIDEO
+      ยังเขียนตามพฤติกรรมก่อนบังคับ VIDEO ไป presign</p>
+    </div>
+
+    <div class="card ok rv">
+      <h3>Runtime repro — sharp ตัวจริง</h3>
+<pre><code>4000x3000 ไม่มี client dims   → resize RAN  70769B→16469B 1920x1440  <span class="c-add">emittedEnd=true</span>  PASS
+4000x1000 มี client dims       → resize RAN  23894B→5669B  1920x480   <span class="c-add">emittedEnd=true</span>  PASS
+800x600  dims ใน limit         → resize SKIP  3119B→3119B   800x600    <span class="c-add">emittedEnd=true</span>  PASS</code></pre>
+      <ul>
+        <li>เคส 1 คือเคสที่ก่อนแก้ให้ <code>emittedEnd=false</code> (แขวน) → <strong>P1 หาย</strong></li>
+        <li>เคส 2 คือเคสที่บั๊ก <code>||</code> ทำให้ข้าม resize → <strong>P4 หาย</strong></li>
+        <li>ทุกเคส <code>fileSize</code> ตรงกับ byte ที่อัปจริง → <strong>P7 หาย</strong></li>
+      </ul>
+    </div>
+
+    <div class="card rv">
+      <h3>Typecheck</h3>
+      <p>clean ทั้ง 3 package — <strong>ต้องใช้ tsc ตัวใน <code>node_modules</code> ของ service
+      (4.9.5)</strong> ไม่ใช่ตัวที่ root เพราะ <code>@types/node</code> ต่างเวอร์ชันจะขึ้น
+      error ปลอมจาก <code>heic-convert</code></p>
+    </div>
+
+    <div class="scroll rv">
+      <table>
+        <thead><tr><th>ไฟล์</th><th class="num">+</th><th class="num">−</th><th>ทำอะไร</th></tr></thead>
+        <tbody>
+          <tr><td><code>room-file/src/service.ts</code></td><td class="num">206</td><td class="num">75</td><td>P1 P2 P3 P4 P6 P7 P8</td></tr>
+          <tr><td><code>data/helpers/notification.helper.ts</code></td><td class="num">52</td><td class="num">4</td><td>P5</td></tr>
+          <tr><td><code>data/dto/room-file.dto.ts</code></td><td class="num">6</td><td class="num">1</td><td><code>pipe: unknown → Readable</code></td></tr>
+          <tr><td><code>room-file/__tests__/uploadFileV3.spec.ts</code></td><td class="num">14</td><td class="num">14</td><td>mock <code>fromStream → fromBuffer</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══ CHANGE ══ -->
+  <section class="act" id="change">
+    <div class="act-head">
+      <span class="act-id rv">สรุป</span>
+      <h2 class="rv">ที่เปลี่ยน และที่ยังอยู่</h2>
+    </div>
+
+    <p class="rv">flow ทั้งหมดคงเดิม — endpoint, request/response shape, error class,
+    socket event ไม่เปลี่ยน ที่เปลี่ยนมี 3 อย่าง ทั้งหมดเป็นการทำให้ตรงตามเจตนาเดิมของโค้ด</p>
+
+    <div class="scroll rv">
+      <table>
+        <thead><tr><th>เปลี่ยนอะไร</th><th>กระทบใคร</th></tr></thead>
+        <tbody>
+          <tr><td><strong>IMAGE &gt; 20 MB ถูกปฏิเสธ</strong> เมื่อ flag ON</td><td>FE ที่อัปรูปเกิน 20 MB — น่าจะไม่มี เพราะ FE บีบอัดก่อนส่ง และ branch อื่นก็ cap 20 MB อยู่แล้ว</td></tr>
+          <tr><td><strong>video/file ได้ thumbnail จริง</strong> เมื่อ FE ไม่ส่ง <code>thumbnailId</code></td><td>field ที่เคยว่างจะมีค่า — shape เดิม</td></tr>
+          <tr><td><strong>multipage TIFF</strong> ได้หน้าแรก</td><td>เดิม <code>animated: true</code> ต่อทุกหน้าเป็นแถบยาว — เคสหาแทบไม่ได้ในแอปแชต</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card caution rv">
+      <h3>RAM — หายบางส่วน ไม่หายทั้งหมด</h3>
+      <p><strong>หายแน่นอน:</strong> request แขวน · ก็อป 4→1 · clone ที่ไม่มีใครอ่าน ·
+      libvips cache 50→32 MB · ไฟล์ที่จะโดนปฏิเสธหยุดอ่านที่เพดาน · IMAGE มีเพดาน</p>
+      <p><strong>ยังอยู่ (ตั้งใจไม่แตะ):</strong></p>
+      <ol>
+        <li><strong>ยังไม่ใช่ streaming จริง</strong> — 1 request ยังถือไฟล์ทั้งก้อนใน heap
+        แต่หลัง P8 เพดานจริงของเส้นนี้อยู่ที่ 10 MB (FILE/VIDEO) และ 20 MB (IMAGE)
+        ไม่ใช่ระดับ 100 MB–1 GB อีก</li>
+        <li><code>getBlurhash(fileBuffer)</code> — ถ้า FE ไม่ส่ง <code>blurhash</code>
+        ยัง sharp decode ภาพเต็มใบอีกรอบ</li>
+        <li><code>file.putObject</code> ฝั่ง file service ยัง clone + buffer ซ้ำ — คนละ service</li>
+      </ol>
+    </div>
+
+    <div class="card rv">
+      <h3>เจอแต่ยังไม่แก้ — ควรตั้งใบแยก</h3>
+      <ol>
+        <li><strong><code>type: "FILE"</code> bypass resize ได้โดยไม่ต้องมี feature flag</strong> —
+        <code>mimeTypeInsert</code> เป็น <code>undefined</code> เมื่อ <code>type === FILE</code>
+        ทำให้ไม่มี processor ถูกเลือก</li>
+        <li><strong><code>isOriginal</code> / <code>isLocked</code> มาจาก <code>$multipart</code>
+        ซึ่งเป็น string</strong> — <code>uploadFileV3</code> เป็น <code>@Action()</code> เปล่า
+        ไม่มี params validator เลย ค่า <code>"false"</code> เป็น truthy</li>
+        <li><code>isOriginal=true</code> + FE ไม่ส่ง width/height → <code>undefined</code>
+        ถาวรใน DB และ HEIC ขึ้น S3 ดิบ ๆ</li>
+        <li>stale spec 23 ตัว</li>
+      </ol>
+    </div>
+
+    <div class="card ok rv">
+      <h3>บทเรียนที่เอาไปใช้ต่อได้</h3>
+      <ol>
+        <li><strong>stream มี consumer ได้คนเดียว</strong> — ต้องใช้หลายที่ ให้ buffer ก้อนเดียว
+        แล้ว <code>Readable.from()</code> ใหม่ทุกครั้ง</li>
+        <li><strong>sharp instance ใช้ได้ท่าเดียว</strong> — เผลอทำทั้งสอง อาการไม่ใช่ error
+        แต่เป็นแขวนเงียบ ๆ ซึ่งหายากกว่ามาก</li>
+        <li><strong>log ต้องอยู่หลังจุดตัดสินใจ</strong> — log ก่อนเช็คเงื่อนไขทำให้ทีมไล่ผิดทาง</li>
+        <li><strong>อย่าตัดสินใจจากค่าที่ client แจ้ง</strong> — cap สิ่งที่เราทำ
+        ไม่ใช่เชื่อตัวเลขจาก client</li>
+        <li><strong>วัด regression ด้วยการ diff รายชื่อเทส</strong> ไม่ใช่นับจำนวน</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer class="doc">
+    ทุกตัวเลขในหน้านี้มาจากการรันจริง — typecheck, jest before/after และรีโปรกับ sharp
+    ตัวจริงใน <code>room-file/node_modules</code> ไม่ใช่การประเมิน ·
+    รายละเอียดเชิงลึกอยู่ที่ <code>my-uchat-solution/UChat-API/room-file-image-upload-fixes/solution.md</code>
+  </footer>
+
+  </main>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* reveal on scroll */
+  const revealables = document.querySelectorAll(".rv");
+  if (reduce) {
+    revealables.forEach((el) => el.classList.add("in"));
+  } else {
+    const ro = new IntersectionObserver((entries) => {
+      entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); ro.unobserve(e.target); } });
+    }, { rootMargin: "0px 0px -12% 0px", threshold: .1 });
+    revealables.forEach((el) => ro.observe(el));
+  }
+
+  /* rail highlight */
+  const links = [...document.querySelectorAll(".rail a")];
+  const targets = links.map((a) => document.querySelector(a.getAttribute("href"))).filter(Boolean);
+  const so = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      links.forEach((a) => a.classList.toggle("on", a.getAttribute("href") === "#" + e.target.id));
+    });
+  }, { rootMargin: "-45% 0px -45% 0px" });
+  targets.forEach((t) => so.observe(t));
+
+  /* ── animation drivers ─────────────────────────────────────────────── */
+  let hangTimers = [];
+
+  function playHang(root) {
+    hangTimers.forEach(clearTimeout);
+    hangTimers = [];
+    const steps = [...root.querySelectorAll(".step")];
+    const clock = root.querySelector("#hangClock");
+    steps.forEach((s) => s.classList.remove("on"));
+    if (clock) clock.textContent = "0.0s";
+    if (reduce) { steps.forEach((s) => s.classList.add("on")); if (clock) clock.textContent = "15.0s"; return; }
+
+    const at = (ms, fn) => hangTimers.push(setTimeout(fn, ms));
+    at(150,  () => steps[0].classList.add("on"));
+    at(900,  () => steps[1].classList.add("on"));
+    at(1700, () => steps[2].classList.add("on"));
+    at(2400, () => {
+      steps[3].classList.add("on");
+      let t = 0;
+      const tick = () => {
+        t += 0.7;
+        if (clock) clock.textContent = t.toFixed(1) + "s";
+        if (t < 15) hangTimers.push(setTimeout(tick, 90));
+        else at(0, () => steps[4].classList.add("on"));
+      };
+      tick();
+    });
+  }
+
+  function playCopies(root) {
+    root.classList.remove("play");
+    const tally = document.getElementById("tally1");
+    if (tally) tally.textContent = "0×";
+    if (reduce) { root.classList.add("play"); if (tally) tally.textContent = "4×"; return; }
+    requestAnimationFrame(() => root.classList.add("play"));
+    let n = 0;
+    const step = () => {
+      n += 1;
+      if (tally) tally.textContent = n + "×";
+      if (n < 4) setTimeout(step, 320);
+    };
+    setTimeout(step, 260);
+  }
+
+  function replayClass(root, cls) {
+    root.classList.remove(cls);
+    void root.offsetWidth;                 /* force reflow so the animation restarts */
+    root.classList.add(cls);
+  }
+
+  const players = {
+    split1: (el) => replayClass(el, "play"),
+    split2: (el) => replayClass(el, "play"),
+    copies1: playCopies,
+    hang1: playHang,
+    /* the shrink animation lives on each .fitbox, not on the wrapper */
+    fit1: (el) => el.querySelectorAll(".fitbox").forEach((box) => replayClass(box, "play")),
+    gate1: (el) => replayClass(el, "play"),
+    tanks1: (el) => replayClass(el, "play"),
+  };
+
+  /* play once when scrolled into view */
+  const ao = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      const id = e.target.id;
+      const play = players[id];
+      if (play) play(e.target);
+      /* split1 and split2 sit in one stage; drive the sibling too */
+      if (id === "split1") { const s2 = document.getElementById("split2"); if (s2) players.split2(s2); }
+      ao.unobserve(e.target);
+    });
+  }, { threshold: .35 });
+  document.querySelectorAll("[data-anim]").forEach((el) => ao.observe(el));
+
+  /* replay buttons */
+  document.querySelectorAll(".replay").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.replay;
+      const el = document.getElementById(id);
+      if (!el) return;
+      const play = players[id];
+      if (play) play(el);
+      if (id === "split1") { const s2 = document.getElementById("split2"); if (s2) players.split2(s2); }
+    });
+  });
+
+  /* count-up stats */
+  document.querySelectorAll("[data-count]").forEach((el) => {
+    const target = Number(el.dataset.count);
+    if (reduce || target === 0) { el.textContent = String(target); return; }
+    const co = new IntersectionObserver((entries) => {
+      if (!entries[0].isIntersecting) return;
+      co.disconnect();
+      let n = 0;
+      const step = () => {
+        n += 1;
+        el.textContent = String(n);
+        if (n < target) setTimeout(step, 90);
+      };
+      el.textContent = "0";
+      setTimeout(step, 120);
+    }, { threshold: .6 });
+    co.observe(el);
+  });
+})();
+</script>
+</body>
+</html>
